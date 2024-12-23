@@ -230,13 +230,21 @@ func timeRangeIndices(indexName, indexDateLayout string, startTime time.Time, en
 	return indices
 }
 
-// GetTrace takes a traceID and returns a Trace associated with that traceID
+func timeOrElse(t time.Time, defaultTime func() time.Time) time.Time {
+	if t.IsZero() {
+		return defaultTime()
+	}
+	return t
+}
+
+// GetTrace takes traceID and optional time window then returns a Trace associated with that traceID
 func (s *SpanReader) GetTrace(ctx context.Context, query spanstore.GetTraceParameters) (*model.Trace, error) {
 	ctx, span := s.tracer.Start(ctx, "GetTrace")
 	defer span.End()
 	currentTime := time.Now()
-	// TODO: use start time & end time in "query" struct
-	traces, err := s.multiRead(ctx, []model.TraceID{query.TraceID}, currentTime.Add(-s.maxSpanAge), currentTime)
+	startTime := timeOrElse(query.StartTime, func() time.Time { return currentTime.Add(-s.maxSpanAge) })
+	endTime := timeOrElse(query.EndTime, func() time.Time { return currentTime })
+	traces, err := s.multiRead(ctx, []model.TraceID{query.TraceID}, startTime, endTime)
 	if err != nil {
 		return nil, es.DetailedError(err)
 	}
